@@ -1,0 +1,21 @@
+defination -> (
+	name [' '] '=' [' '] lambda
+|
+	'$' [' '] parameters [' '] '{' code_block '}'
+)
+
+code_block = {defination} ' ' expression
+
+expression -> (
+	name
+|
+	name ' ' [expression]
+|
+	name [' '] '(' [' '] expression [' '] ')'
+|
+	'{' [' '] lambda [' '] '}'
+)
+
+lambda -> '$' [' '] [parameters] [' '] ':' [' '] expression
+
+parameters -> name [' ' parameters]

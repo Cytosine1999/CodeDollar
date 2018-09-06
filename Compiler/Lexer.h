@@ -6,15 +6,120 @@
 #define CODEDOLLAR_LEXER_H
 
 
-#include <iostream>
 #include <istream>
-#include <sstream>
 #include <string>
 #include <regex>
+#include <vector>
+#include <iterator>
 
 using namespace std;
 
 #include "Compiler.h"
+#include "Tree.h"
+#include "LexerBase.h"
+
+
+template<typename T>
+class CodeLine;
+
+template<typename T>
+class FileSliceString;
+
+
+template<typename T>
+class BasicFile : public File<T> {
+public:
+    typedef basic_string<T> stringT;
+    typedef basic_istream<T> istreamT;
+    typedef File<T> FileT;
+    typedef FileLine<T> FileLineT;
+    typedef CodeLine<T> CodeLineT;
+
+    explicit BasicFile(istreamT &content) : FileT{} {
+        stringT tmp{};
+        while (getline(content, tmp)) {
+            this->push_back(new CodeLineT{*this, this->size(), move(tmp)});
+        }
+    }
+};
+
+
+template<typename T>
+class CodeLine : public FileLine<T> {
+public:
+    typedef basic_string<T> stringT;
+    typedef typename stringT::const_iterator stringT_iter;
+    typedef File<T> FileT;
+    typedef FileLine<T> FileLineT;
+    typedef FileSlice<T> FileSliceT;
+    typedef FileSliceString<T> FileSliceStringT;
+
+    CodeLine(FileT &file, size_t lineNum, string line) :
+            FileLineT{file, lineNum} {
+        stringT tmp{};
+        stringT_iter begin = line.begin();
+        stringT_iter end = line.end();
+        while (FileSliceStringT::match(begin, end, tmp)) {
+            begin += tmp.length();
+            this->push_back(new FileSliceStringT{*this, move(tmp)});
+        }
+        if (begin != end) {
+            throw CompilerException("Lexer failed.");
+        }
+    }
+};
+
+
+template<typename T>
+class FileSliceString : public FileSlice<T> {
+public:
+    typedef FileSlice<T> FileSliceT;
+    typedef basic_string<T> stringT;
+    typedef typename stringT::const_iterator stringT_iter;
+    typedef FileLine<T> FileLineT;
+    typedef basic_regex <T> regexT;
+    typedef match_results<typename stringT::const_iterator> matchesT;
+
+    static bool match(stringT_iter start, stringT_iter end, stringT &match) {
+        return regex_match(start, end, match, SPACE) ||
+               regex_match(start, end, match, ONE_CHARACTER_SYMBOL) ||
+               regex_match(start, end, match, FALL_BACK);
+    }
+
+    FileSliceString(FileLineT &line, stringT slice, size_t columnNum = 0) :
+            FileSliceT{line, columnNum}, slice{slice} {}
+
+    FileSliceString(const FileSliceString &other) = default;
+
+    FileSliceString &operator=(const FileSliceString &other) = default;
+
+    const stringT &toString() const override final {
+        return slice;
+    }
+
+    size_t length() const override final {
+        return slice.length();
+    }
+
+    virtual ~FileSliceString() = default;
+
+protected:
+    static const regexT SPACE;
+    static const regexT ONE_CHARACTER_SYMBOL;
+    static const regexT FALL_BACK;
+
+    static bool regex_match(stringT_iter start, stringT_iter end, stringT &match, regexT pattern) {
+        matchesT matches;
+        if (regex_search(start, end, matches, pattern)) {
+            match = matches[0];
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    stringT slice;
+};
 
 
 template<typename T>
@@ -34,23 +139,42 @@ public:
 
     CodeSlice &operator=(const CodeSlice &other) = default;
 
-    friend istreamT &operator>>(istreamT &stream, CodeSlice &self) { return stream >> self.slice; }
+    friend istreamT &operator>>(istreamT &stream, CodeSlice &self) {
+        return stream >> self.slice;
+    }
 
-    friend ostreamT &operator<<(ostreamT &stream, CodeSlice &self) { return stream << self.slice; }
+    friend ostreamT &operator<<(ostreamT &stream, CodeSlice &self) {
+        return stream << self.slice;
+    }
 
-    operator stringT() const { return slice; }
+    operator stringT() const {
+        return slice;
+    }
 
-    const stringT &toString() const { return slice; }
+    const stringT &toString() const {
+        return slice;
+    }
 
-    void setLocation(size_t line, size_t column) { this->line = line, this->column = column; }
+    void setLocation(size_t line, size_t column) {
+        this->line = line;
+        this->column = column;
+    }
 
-    size_t getLine() const { return line; }
+    size_t getLine() const {
+        return line;
+    }
 
-    size_t getColumn() const { return column; }
+    size_t getColumn() const {
+        return column;
+    }
 
-    size_t len() const { return slice.length(); }
+    size_t len() const {
+        return slice.length();
+    }
 
-    CodeSlice subSlice(size_t start) { return CodeSlice{slice.substr(start), line, column + start}; }
+    CodeSlice subSlice(size_t start) {
+        return CodeSlice{slice.substr(start), line, column + start};
+    }
 
     ~CodeSlice() = default;
 
@@ -117,7 +241,7 @@ class Tokenizer {
 public:
     typedef basic_string<T> stringT;
     typedef Spliter<T> SpliterT;
-    typedef basic_regex<T> regexT;
+    typedef basic_regex <T> regexT;
     typedef typename SpliterT::istreamT istreamT;
     typedef match_results<typename stringT::const_iterator> resultsT;
     typedef CodeSlice<T> CodeSliceT;
@@ -142,8 +266,8 @@ public:
     ~Tokenizer() = default;
 
 private:
-    const regexT ONE_CHARACTER_SYMBOL = regex{R"(^[\$\:\(\)\{\}])"};
-    const regexT NONE_SYMBOL = regex{R"(^((?![\$\:\(\)\{\}])\S)+)"};
+    static const regexT ONE_CHARACTER_SYMBOL;
+    static const regexT NONE_SYMBOL;
 
     SpliterT spliter;
     CodeSliceT buffer;
@@ -160,5 +284,7 @@ private:
     }
 };
 
+
+#include "Lexer.tcc"
 
 #endif //CODEDOLLAR_LEXER_H
