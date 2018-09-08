@@ -6,6 +6,7 @@
 #define CODEDOLLAR_TREE_H
 
 
+#include "iostream"
 #include <vector>
 #include <iterator>
 #include <memory>
@@ -14,23 +15,23 @@ using namespace std;
 
 
 template<typename T>
-class TreeIter : iterator<forward_iterator_tag, vector<unique_ptr<T>>> {
+class uniquePtrIter : iterator<forward_iterator_tag, vector<unique_ptr<T>>> {
 public:
     typedef typename vector<unique_ptr<T>>::const_iterator iterT;
 
-    explicit TreeIter(iterT ptr) : ptr{ptr} {}
+    explicit uniquePtrIter(iterT ptr) : ptr{ptr} {}
 
-    TreeIter(const TreeIter &other) = default;
+    uniquePtrIter(const uniquePtrIter &other) = default;
 
-    TreeIter &operator=(const TreeIter &other) = default;
+    uniquePtrIter &operator=(const uniquePtrIter &other) = default;
 
-    TreeIter &operator++() {
+    uniquePtrIter &operator++() {
         ptr++;
         return *this;
     }
 
-    const TreeIter operator++(int) {
-        const TreeIter tmp{*this};
+    const uniquePtrIter operator++(int) {
+        const uniquePtrIter tmp{*this};
         ptr++;
         return tmp;
     }
@@ -39,15 +40,15 @@ public:
         return **ptr;
     }
 
-    const T &operator->() {
-        return **ptr;
+    const unique_ptr<T> &operator->() {
+        return *ptr;
     }
 
-    bool operator==(const TreeIter &other) const {
+    bool operator==(const uniquePtrIter &other) const {
         return ptr == other.ptr;
     }
 
-    bool operator!=(const TreeIter &other) const {
+    bool operator!=(const uniquePtrIter &other) const {
         return ptr != other.ptr;
     }
 
@@ -57,23 +58,28 @@ protected:
 };
 
 
-template<typename T>
-class TreeIterable {
+template<typename valueT, typename ownerT>
+class uniquePtrIterable {
 public:
-    typedef vector<unique_ptr<T>> vectorT;
+    typedef vector<unique_ptr<valueT>> vectorT;
 
-    explicit TreeIterable(const vectorT &vec) : vec{vec} {}
+    explicit uniquePtrIterable(const vectorT &vec, ownerT &owner) : vec{vec}, owner{owner} {}
 
-    TreeIter<T> begin() {
-        return TreeIter<T>{vec.begin()};
+    uniquePtrIter<valueT> begin() {
+        return uniquePtrIter<valueT>{vec.begin()};
     }
 
-    TreeIter<T> end() {
-        return TreeIter<T>{vec.end()};
+    uniquePtrIter<valueT> end() {
+        return uniquePtrIter<valueT>{vec.end()};
+    }
+
+    bool notEnd(uniquePtrIter<valueT> ptr) {
+        return ptr != end() || owner.pushBack();
     }
 
 protected:
     const vectorT &vec;
+    ownerT &owner;
 
 };
 
@@ -94,8 +100,14 @@ public:
         return subNodes.size();
     }
 
-    TreeIterable<T> iter() const {
-        return TreeIterable<T>{subNodes};
+    uniquePtrIterable<T, Tree<T>> iter() {
+        return uniquePtrIterable<T, Tree<T>>{subNodes, *this};
+    }
+
+    virtual bool load() = 0;
+
+    T &back() {
+        return *subNodes.back();
     }
 
     virtual ~Tree() = default;
@@ -135,8 +147,8 @@ public:
         return **ptr;
     }
 
-    const T &operator->() {
-        return **ptr;
+    const T *operator->() {
+        return *ptr;
     }
 
     bool operator==(const RefVecIter &other) const {
@@ -166,6 +178,10 @@ public:
 
     RefVecIter<T> end() {
         return RefVecIter<T>{vec.end()};
+    }
+
+    bool notEnd(RefVecIter<T> ptr) {
+        return ptr != end();
     }
 
 protected:

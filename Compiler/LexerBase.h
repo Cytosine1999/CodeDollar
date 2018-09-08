@@ -14,10 +14,8 @@
 
 using namespace std;
 
-#include "Compiler.h"
 #include "Tree.h"
-
-using namespace Compiler;
+#include "Lexeme.h"
 
 
 template<typename T>
@@ -35,29 +33,15 @@ public:
     typedef FileLine<T> FileLineT;
     typedef FileSlice<T> FileSliceT;
 
-    File() : TreeT{}, len{0} {}
+    File() : TreeT{} {}
 
     File(const File &other) = default;
 
     File &operator=(const File &other) = default;
 
-    size_t length() const {
-        return len;
-    }
-
-    stringT toString() const{
-        stringT tmp{};
-        tmp.reserve(this->length());
-        for (const auto &line: *this) {
-            tmp += line->toString() + '\n';
-        }
-        return tmp;
-    }
-
     virtual ~File() = default;
 
 protected:
-    size_t len;
 };
 
 
@@ -69,36 +53,31 @@ public:
     typedef File<T> FileT;
     typedef FileSlice<T> FileSliceT;
 
-    FileLine(const FileT *file, size_t lineNum, size_t length) :
-            TreeT{}, file{file}, lineNum{lineNum}, len{length} {}
+    FileLine(const FileT *file, size_t lineNum, stringT line) :
+            TreeT{}, file{file}, lineNum{lineNum}, line{line} {}
 
     FileLine(const FileLine &other) = default;
 
     FileLine &operator=(const FileLine &other) = default;
 
-    size_t length() const {
-        return len;
-    }
-
     size_t getLineNum() const {
         return lineNum;
     }
 
-    stringT toString() const {
-        stringT tmp{};
-        tmp.reserve(this->length());
-        for (const auto &slice: *this) {
-            tmp += slice->toString();
-        }
-        return tmp;
+    const stringT &toString() const {
+        return line;
     };
+
+    size_t length() const {
+        return line.length();
+    }
 
     virtual ~FileLine() = default;
 
 protected:
     const FileT *file;
     size_t lineNum;
-    size_t len;
+    stringT line;
 };
 
 
@@ -111,8 +90,8 @@ public:
     typedef FileLine<T> FileLineT;
     typedef match_results<stringT_iter> resultsT;
 
-    FileSlice(const FileLineT *line, size_t columnNum, size_t sliceNum, stringT slice) :
-            line{line}, columnNum{columnNum}, sliceNum{sliceNum}, slice{slice} {}
+    FileSlice(const FileLineT *line, size_t columnNum, stringT slice) :
+            line{line}, columnNum{columnNum}, slice{slice} {}
 
     FileSlice(const FileSlice &other) = default;
 
@@ -129,6 +108,8 @@ public:
     const stringT &toString() const {
         return slice;
     }
+
+    virtual Lexeme toLexeme() const = 0;
 
     size_t length() const {
         return slice.length();
@@ -150,7 +131,6 @@ protected:
 
     const FileLineT *line;
     size_t columnNum;
-    size_t sliceNum;
     stringT slice;
 };
 
