@@ -128,8 +128,8 @@ public:
 
     CodeSymbol &operator=(const CodeSymbol &other) = default;
 
-    virtual Lexeme toLexeme() const final {
-        return SymbolLexeme{};
+    virtual Lexeme<T> toLexeme() const final {
+        return SymbolLexeme<T>{*this};
     };
 
     virtual ~CodeSymbol() = default;
@@ -159,8 +159,8 @@ public:
 
     CodeName &operator=(const CodeName &other) = default;
 
-    virtual Lexeme toLexeme() const final {
-        return NameLexeme{};
+    virtual Lexeme<T> toLexeme() const final {
+        return NameLexeme<T>{*this};
     };
 
     virtual ~CodeName() = default;

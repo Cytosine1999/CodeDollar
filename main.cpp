@@ -16,8 +16,7 @@ int main() {
     using charT = ifstream::char_type;
     file.open(TEST_FILE_DIR);
     BasicFile<charT> test{file};
-    SyntaxTree tree;
-    Parser<charT> parser{test, tree};
+    Parser<charT> parser{test};
     parser.parse();
 
     file.close();

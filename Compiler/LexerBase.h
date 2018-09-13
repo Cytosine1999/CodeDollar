@@ -109,7 +109,7 @@ public:
         return slice;
     }
 
-    virtual Lexeme toLexeme() const = 0;
+    virtual Lexeme<T> toLexeme() const = 0;
 
     size_t length() const {
         return slice.length();
