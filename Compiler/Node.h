@@ -26,14 +26,7 @@ class Context {
 public:
     typedef pair<basic_string<T>, shared_ptr<Lambda<T>>> pairT;
 
-    Context(vector<vector<T>> &&link) : access_links{link} {}
-
-    Context(basic_string<T> name, shared_ptr<Lambda<T>> value, vector<pairT> lambdas, Context<T> upper_layer) :
-            access_links{lambdas.push_back(make_pair(name, value))} {}
-
-    Context<T> closure(basic_string<T> name, unique_ptr<Lambda<T>> value, vector<pairT> lambdas) {
-        return Context{name, value, lambdas, this};
-    }
+    Context(vector<vector<pairT>> &&link) : access_links{link} {}
 
     Closure<T> find(basic_string<T> target) {
         auto e = access_links.rend();
@@ -49,14 +42,26 @@ public:
         }
         outer_loop:
 
-        return lambda->toClosure(vector<vector<T>>{++e, ++i});
+        return lambda->toClosure(vector<vector<pairT>>{++e, ++i});
     }
 
     Context<T> push(vector<pairT> link) {
         auto tmp = access_links;
-        return tmp.push_back(link);
+        tmp.push_back(link);
+        return Context<T>{move(tmp)};
     }
 
+    Context<T> bind(pairT link) {
+        auto tmp = access_links;
+        tmp.back().push_back(link);
+        return Context<T>{move(tmp)};
+    }
+
+    vector<pairT> back() {
+        return access_links.back();
+    }
+
+protected:
     vector<vector<pairT>> access_links;
 };
 
@@ -74,13 +79,13 @@ protected:
 template<typename T>
 class CombineNode : public Node<T> {
 public:
-    CombineNode() : left{}, right{} {}
+    CombineNode() : Node<T>{}, left{}, right{} {}
 
     CombineNode(unique_ptr<Node<T>> &&left, unique_ptr<Node<T>> &&right) :
             left{move(left)}, right{move(right)} {}
 
     virtual Closure<T> calculate(Context<T> context) final {
-        return left->calculate(context)->call(right->calculate(context));
+        return left->calculate(context).call(right->calculate(context));
     }
 
 
@@ -92,7 +97,7 @@ protected:
 template<typename T>
 class Symbol : public Node<T> {
 public:
-    Symbol(basic_string<T> target) : target{target} {}
+    Symbol(basic_string<T> target) : Node<T>{}, target{target} {}
 
     virtual Closure<T> calculate(Context<T> context) final {
         return context.find(target);
@@ -138,40 +143,52 @@ class Lambda {
 public:
     typedef pair<basic_string<T>, shared_ptr<Lambda<T>>> pairT;
 
-    Lambda(basic_string<T> argument) : argument{argument}, lambdas{}, root{} {}
+    Lambda(basic_string<T> argument) : argument{argument}, root{}, lambdas{} {}
+
+    Lambda(basic_string<T> argument, shared_ptr<Root<T>> root, vector<pairT> lambdas) :
+            argument{argument}, root{root}, lambdas{lambdas} {}
 
     void set_root(Root<T> &&root) {
-        this->root = move(root);
+        this->root = make_shared<Root<T>>(move(root));
     }
 
-    void add_lambda(unique_ptr<Lambda<T>> &&lambda) {
+    void set_root(unique_ptr<Node<T>> &&root) {
+        this->root = make_shared<Root<T>>(move(root));
+    }
+
+    void add_lambda(pairT &&lambda) {
         lambdas.push_back(move(lambda));
     }
 
-    Closure<T> toClosure(vector<vector<pairT>> access_link) {
+    Closure<T> toClosure(Context<T> access_link) {
         return Closure<T>{argument, root, access_link.push(lambdas)};
     }
 
 protected:
     basic_string<T> argument;
+    shared_ptr<Root<T>> root;
     vector<pairT> lambdas;
-    Root<T> root;
+
 };
 
 
 template<typename T>
 class Closure {
 public:
-    Closure(basic_string<T> argument, Root<T> root, Context<T> access_link) :
+    Closure(basic_string<T> argument, shared_ptr<Root<T>> root, Context<T> access_link) :
             argument{argument}, root{root}, access_link{access_link} {}
 
     Closure call(Closure value) {
-        return root.calculate(access_link.closure(argument, value));
+        return root->calculate(access_link.bind(make_pair(argument, value.toLambda())));
+    }
+
+    shared_ptr<Lambda<T>> toLambda() {
+        return make_shared<Lambda<T>>(argument, root, access_link.back());
     }
 
 protected:
     basic_string<T> argument;
-    Root<T> root;
+    shared_ptr<Root<T>> root;
     Context<T> access_link;
 };
 

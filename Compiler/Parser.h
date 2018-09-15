@@ -19,18 +19,35 @@ using namespace std;
 
 
 template<typename T>
+class FallBackNameGen {
+public:
+    static FallBackNameGen GEN;
+
+    basic_string<T> next() {
+        basic_string<T> name = "$" + to_string(counter);
+        counter++;
+        return name;
+    }
+
+protected:
+    FallBackNameGen() : counter{0} {}
+
+    size_t counter;
+};
+
+template<typename T>
+FallBackNameGen<T> FallBackNameGen<T>::GEN{};
+
+
+template<typename T>
 class Scope {
 public:
-    Scope() : lambdas{}, buffer{}, symbols{} {}
+    typedef pair<basic_string<T>, shared_ptr<Lambda<T>>> pairT;
+
+    Scope() : lambdas{}, buffer{} {}
 
     void add_parameters(Lexeme<T> lexeme) {
-        auto symbol = make_shared<unique_ptr<Lambda<T>>>();
-        symbols.push_back(make_pair(lexeme, symbol));
-        auto lambda = make_unique<Lambda<T>>(symbol);
-        if (lambdas.size() != 0) {
-            lambdas.back()->set_root(Root<T>{unique_ptr<Node<T>>{new LambdaNode<T>{*lambda}}});
-        }
-        lambdas.push_back(move(lambda));
+        lambdas.push_back(make_pair(FallBackNameGen<T>::GEN.next(), make_shared<Lambda<T>>(lexeme.toString())));
     }
 
     void colon_init(Lexeme<T> lexeme) {
@@ -55,15 +72,16 @@ public:
         }
     }
 
-    unique_ptr<Lambda<T>> clean_up() {
+    pairT clean_up() {
         if (buffer.size() != 1) {
             throw CompilerError("missing right brackets");
         }
-        lambdas.back()->set_root(move(buffer.back().second));
+        lambdas.back().second->set_root(move(buffer.back().second));
         for (auto i = lambdas.size(); i > 1; i--) {
             auto back = move(lambdas.back());
             lambdas.pop_back();
-            lambdas.back()->add_lambda(move(back));
+            lambdas.back().second->set_root(unique_ptr<Node<T>>{new Symbol<T>{back.first}});
+            lambdas.back().second->add_lambda(move(back));
         }
         return move(lambdas.back());
     }
@@ -72,9 +90,8 @@ public:
         buffer.push_back(make_pair(lexeme, Root<T>{}));
     }
 
-    vector<unique_ptr<Lambda<T>>> lambdas;
+    vector<pairT> lambdas;
     vector<pair<Lexeme<T>, Root<T>>> buffer;
-    vector<pair<Lexeme<T>, shared_ptr<unique_ptr<Lambda<T>>>>> symbols;
 };
 
 
@@ -122,7 +139,7 @@ public:
                             } else if (stack.back().buffer.back().first.type == Type::LAMBDA) {
                                 throw CompilerException("explicit lambda not supported yet");
                             } else {
-                                stack.back().push(unique_ptr<Node<T>>{new LambdaLink<T>{find_symbol(lexeme)}});
+                                stack.back().push(unique_ptr<Node<T>>{new Symbol<T>{lexeme.toString()}});
                             }
                     }
                 }
@@ -136,21 +153,9 @@ public:
     void right_brackets_resolve(Lexeme<T> lexeme) {
         auto lambda = stack.back().clean_up();
         stack.pop_back();
-        auto lambdaNode = unique_ptr<Node<T>>{new LambdaNode<T>{*lambda}};
-        stack.back().buffer.pop_back();
-        stack.back().buffer.back().second.push(move(lambdaNode));
+        stack.back().buffer.pop_back();       // pop lexeme lambda
+        stack.back().buffer.back().second.push(unique_ptr<Node<T>>{new Symbol<T>{lambda.first}});
         stack.back().lambdas.push_back(move(lambda));
-    }
-
-    shared_ptr<unique_ptr<Lambda<T>>> find_symbol(Lexeme<T> lexeme) {
-        for (auto begin = stack.rbegin(), end = stack.rend(); begin != end; ++begin) {
-            for (auto each: begin->symbols) {
-                if (each.first.toString() == lexeme.toString()) {
-                    return each.second;
-                }
-            }
-        }
-        throw CompilerException("unbounded symbol");
     }
 
 protected:

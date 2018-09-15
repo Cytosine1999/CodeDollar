@@ -33,7 +33,7 @@ public:
 
     Lexeme(const FileSlice<T> &slice) : slice{&slice}, type{Type::COLON} {}
 
-    const string &toString() {
+    const basic_string<T> &toString() {
         return slice->toString();
     }
 
