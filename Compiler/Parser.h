@@ -98,56 +98,57 @@ public:
 template<typename T>
 class Parser {
 public:
-    Parser(BasicFile<T> &file) :
+    explicit Parser(BasicFile<T> &file) :
             file{file}, stack{} {
         stack.push_back(Scope<T>{});
         stack.back().buffer.push_back(make_pair(Lexeme<T>{}, Root<T>{}));
     }
 
-    void parse() {
-        try {
-            while (file.load()) {
-                auto &line = file.back();
-                while (line.load()) {
-                    Lexeme<T> lexeme = line.back().toLexeme();
-                    switch (lexeme.type) {
-                        case Type::LEFT_BRACE:
-                            stack.back().brace_enter(lexeme);
-                            break;
-                        case Type::RIGHT_BRACE:
-                            stack.back().brace_leave(lexeme);
-                            break;
-                        case Type::LEFT_BRACKET :
-                            if (stack.back().buffer.back().first.type == Type::LAMBDA) {
-                                stack.push_back(Scope<T>{});
-                            } else {
-                                throw CompilerError("unbounded block scope");
-                            }
-                            break;
-                        case Type::RIGHT_BRACKET :
-                            right_brackets_resolve(lexeme);
-                            break;
-                        case Type::COLON:
-                            stack.back().colon_init(lexeme);
-                            break;
-                        case Type::LAMBDA :
-                            stack.back().lambda_add(lexeme);
-                            break;
-                        case Type::IDENTIFICATION:
-                            if (stack.back().buffer.size() == 0) {
-                                stack.back().add_parameters(lexeme);
-                            } else if (stack.back().buffer.back().first.type == Type::LAMBDA) {
-                                throw CompilerException("explicit lambda not supported yet");
-                            } else {
-                                stack.back().push(unique_ptr<Node<T>>{new Symbol<T>{lexeme.toString()}});
-                            }
-                    }
+    Lambda<T> parse() {
+        while (file.load()) {
+            auto &line = file.back();
+            while (line.load()) {
+                Lexeme<T> lexeme = line.back().toLexeme();
+                switch (lexeme.type) {
+                    case Type::LEFT_BRACE:
+                        stack.back().brace_enter(lexeme);
+                        break;
+                    case Type::RIGHT_BRACE:
+                        stack.back().brace_leave(lexeme);
+                        break;
+                    case Type::LEFT_BRACKET :
+                        if (stack.back().buffer.back().first.type == Type::LAMBDA) {
+                            stack.push_back(Scope<T>{});
+                        } else {
+                            throw CompilerError("unbounded block scope");
+                        }
+                        break;
+                    case Type::RIGHT_BRACKET :
+                        right_brackets_resolve(lexeme);
+                        break;
+                    case Type::COLON:
+                        stack.back().colon_init(lexeme);
+                        break;
+                    case Type::LAMBDA :
+                        stack.back().lambda_add(lexeme);
+                        break;
+                    case Type::IDENTIFICATION:
+                        if (stack.back().buffer.size() == 0) {
+                            stack.back().add_parameters(lexeme);
+                        } else if (stack.back().buffer.back().first.type == Type::LAMBDA) {
+                            throw CompilerException("explicit lambda not supported yet");
+                        } else {
+                            stack.back().push(unique_ptr<Node<T>>{new Symbol<T>{lexeme.toString()}});
+                        }
+                        break;
                 }
             }
-        } catch (CompilerError &e) {
-            cout << e.what() << endl;
-            throw e;
         }
+        return Lambda<T>{
+                basic_string<T>{"args"},
+                shared_ptr<Root<T>>{new Root{move(stack.back().buffer.back().second)}},
+                stack.back().lambdas
+        };
     }
 
     void right_brackets_resolve(Lexeme<T> lexeme) {

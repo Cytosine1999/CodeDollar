@@ -20,49 +20,79 @@ class Lambda;
 template<typename T>
 class Closure;
 
+template<typename T>
+class Context;
+
+
+template<typename T>
+class LocalData {
+public:
+    typedef pair<basic_string<T>, Closure<T>> pairArgs;
+    typedef pair<basic_string<T>, shared_ptr<Lambda<T>>> pairLambda;
+
+    explicit LocalData(basic_string<T> argument, vector<pairLambda> access_link) :
+            argument{make_pair(argument, Closure<T>{})}, access_link{access_link} {}
+
+    void pass_argument(Closure<T> value) {
+        argument.second = value;
+    }
+
+
+    pairArgs argument;
+    vector<pairLambda> access_link;
+
+};
+
 
 template<typename T>
 class Context {
 public:
-    typedef pair<basic_string<T>, shared_ptr<Lambda<T>>> pairT;
+    typedef pair<basic_string<T>, shared_ptr<Closure<T>>> pairArgs;
+    typedef pair<basic_string<T>, shared_ptr<Lambda<T>>> pairLambda;
 
-    Context(vector<vector<pairT>> &&link) : access_links{link} {}
+    Context() : access_links{} {}
+
+    explicit Context(vector<LocalData<T>> &&link) : access_links{move(link)} {}
 
     Closure<T> find(basic_string<T> target) {
-        auto e = access_links.rend();
-        auto i = access_links.rbegin();
-        shared_ptr<Lambda<T>> lambda;
-        for (; i != e; --i) {
-            for (auto each: *i) {
+        auto i = access_links.end();
+        auto e = access_links.begin();
+        while (i-- != e) {
+            if (i->argument.first == target) {
+                return i->argument.second;
+            }
+            for (auto each: i->access_link) {
                 if (each.first == target) {
-                    lambda = each.second;
-                    goto outer_loop;
+                    return each.second->toClosure(Context{vector<LocalData<T>>{e, ++i}});
                 }
             }
         }
-        outer_loop:
-
-        return lambda->toClosure(vector<vector<pairT>>{++e, ++i});
+        throw CompilerError("unbind symbol");
     }
 
-    Context<T> push(vector<pairT> link) {
+    Context<T> push(basic_string<T> argument, vector<pairLambda> data) {
         auto tmp = access_links;
-        tmp.push_back(link);
+        tmp.push_back(LocalData<T>{argument, data});
         return Context<T>{move(tmp)};
     }
 
-    Context<T> bind(pairT link) {
+    Context<T> pass_argument(Closure<T> value) {
         auto tmp = access_links;
-        tmp.back().push_back(link);
+        tmp.back().pass_argument(value);
         return Context<T>{move(tmp)};
     }
 
-    vector<pairT> back() {
+    LocalData<T> back() {
         return access_links.back();
     }
 
+    // for test only
+    basic_string<T> get_args() {
+        return access_links.back().argument.first;
+    }
+
 protected:
-    vector<vector<pairT>> access_links;
+    vector<LocalData<T>> access_links;
 };
 
 
@@ -70,6 +100,8 @@ template<typename T>
 class Node {
 public:
     virtual Closure<T> calculate(Context<T> context) = 0;
+
+    virtual basic_string<T> toString(Context<T> context, bool flag) = 0;
 
 protected:
 
@@ -88,6 +120,13 @@ public:
         return left->calculate(context).call(right->calculate(context));
     }
 
+    virtual basic_string<T> toString(Context<T> context, bool flag) final {
+        if (flag) {
+            return"(" + left->toString(context, false) + " " + right->toString(context, true) + ")";
+        } else {
+            return left->toString(context, false) + " " + right->toString(context, true);
+        }
+    }
 
 protected:
     unique_ptr<Node<T>> left, right;
@@ -97,10 +136,19 @@ protected:
 template<typename T>
 class Symbol : public Node<T> {
 public:
-    Symbol(basic_string<T> target) : Node<T>{}, target{target} {}
+    explicit Symbol(basic_string<T> target) : Node<T>{}, target{target} {}
 
     virtual Closure<T> calculate(Context<T> context) final {
         return context.find(target);
+    }
+
+    virtual basic_string<T> toString(Context<T> context, bool flag) final {
+        auto tmp = context.find(target);
+        if (tmp.if_init()) {
+            return tmp.toString();
+        } else {
+            return target;
+        }
     }
 
 
@@ -132,6 +180,11 @@ public:
         return root->calculate(context);
     }
 
+    // for test only
+    basic_string<T> toString(Context<T> context) {
+        return root->toString(context, false);
+    }
+
 protected:
     unique_ptr<Node<T>> root;
 
@@ -143,7 +196,7 @@ class Lambda {
 public:
     typedef pair<basic_string<T>, shared_ptr<Lambda<T>>> pairT;
 
-    Lambda(basic_string<T> argument) : argument{argument}, root{}, lambdas{} {}
+    explicit Lambda(basic_string<T> argument) : argument{argument}, root{}, lambdas{} {}
 
     Lambda(basic_string<T> argument, shared_ptr<Root<T>> root, vector<pairT> lambdas) :
             argument{argument}, root{root}, lambdas{lambdas} {}
@@ -161,7 +214,12 @@ public:
     }
 
     Closure<T> toClosure(Context<T> access_link) {
-        return Closure<T>{argument, root, access_link.push(lambdas)};
+        return Closure<T>{root, access_link.push(argument, lambdas)};
+    }
+
+    // this function is temporary and only for test
+    Closure<T> calculate() {
+        return toClosure(Context<T>{}).call(Closure<T>());
     }
 
 protected:
@@ -175,19 +233,31 @@ protected:
 template<typename T>
 class Closure {
 public:
-    Closure(basic_string<T> argument, shared_ptr<Root<T>> root, Context<T> access_link) :
-            argument{argument}, root{root}, access_link{access_link} {}
+    Closure() : root{}, access_link{} {}
+
+    Closure(shared_ptr<Root<T>> root, Context<T> access_link) :
+            root{root}, access_link{access_link} {}
 
     Closure call(Closure value) {
-        return root->calculate(access_link.bind(make_pair(argument, value.toLambda())));
+        return root->calculate(access_link.pass_argument(value));
     }
 
     shared_ptr<Lambda<T>> toLambda() {
-        return make_shared<Lambda<T>>(argument, root, access_link.back());
+        return make_shared<Lambda<T>>(root, access_link.back());
+    }
+
+    // for test only
+    basic_string<T> toString() {
+
+
+        return "${" + access_link.get_args() + ": " + root->toString(access_link) + "}";
+    }
+
+    bool if_init() {
+        return root != nullptr;
     }
 
 protected:
-    basic_string<T> argument;
     shared_ptr<Root<T>> root;
     Context<T> access_link;
 };
