@@ -209,6 +209,10 @@ public:
         this->root = make_shared<Root<T>>(move(root));
     }
 
+    void set_lambdas(vector<pairT> lambdas) {
+        this->lambdas = lambdas;
+    }
+
     void add_lambda(pairT &&lambda) {
         lambdas.push_back(move(lambda));
     }

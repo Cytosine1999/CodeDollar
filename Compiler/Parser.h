@@ -77,7 +77,8 @@ public:
             throw CompilerError("missing right brackets");
         }
         lambdas.back().second->set_root(move(buffer.back().second));
-        for (auto i = lambdas.size(); i > 1; i--) {
+        lambdas.back().second->set_lambdas(move(last_lambdas));
+        while (lambdas.size() > 1) {
             auto back = move(lambdas.back());
             lambdas.pop_back();
             lambdas.back().second->set_root(unique_ptr<Node<T>>{new Symbol<T>{back.first}});
@@ -90,6 +91,7 @@ public:
         buffer.push_back(make_pair(lexeme, Root<T>{}));
     }
 
+    vector<pairT> last_lambdas;
     vector<pairT> lambdas;
     vector<pair<Lexeme<T>, Root<T>>> buffer;
 };
@@ -147,7 +149,7 @@ public:
         return Lambda<T>{
                 basic_string<T>{"args"},
                 shared_ptr<Root<T>>{new Root{move(stack.back().buffer.back().second)}},
-                stack.back().lambdas
+                stack.back().last_lambdas
         };
     }
 
@@ -155,8 +157,8 @@ public:
         auto lambda = stack.back().clean_up();
         stack.pop_back();
         stack.back().buffer.pop_back();       // pop lexeme lambda
-        stack.back().buffer.back().second.push(unique_ptr<Node<T>>{new Symbol<T>{lambda.first}});
-        stack.back().lambdas.push_back(move(lambda));
+        stack.back().push(unique_ptr<Node<T>>{new Symbol<T>{lambda.first}});
+        stack.back().last_lambdas.push_back(move(lambda));
     }
 
 protected:
